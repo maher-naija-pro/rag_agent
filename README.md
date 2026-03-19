@@ -71,6 +71,8 @@ Metrics docs in `evaluation/METRICS.md`.
 ## Tests
 
 ```bash
-cd rag_agent_pipeline
-pytest
+./run-tests.sh          # spins up Qdrant + Ollama, runs pytest, tears down
+./run-tests.sh -v       # verbose output
 ```
+
+Requires `tesseract-ocr` installed locally. The script handles Docker services automatically.
