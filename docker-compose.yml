@@ -1,45 +1,40 @@
 services:
-  langflow:
-    image: langflowai/langflow:1.8.1
-    container_name: langflow
+  api:
+    build: ./rag_agent_pipeline
+    container_name: rag-api
     restart: unless-stopped
-    user: root
     ports:
-      - "7860:7860"
+      - "8000:8000"
     depends_on:
-      - qdrant
-      - postgres
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_started
     environment:
-      - LANGFLOW_DATABASE_URL=postgresql://langflow:langflow@postgres:5432/langflow
-      - LANGFLOW_CONFIG_DIR=/app/langflow
+      - OLLAMA_BASE_URL=http://ollama:11434/v1
       - QDRANT_URL=http://qdrant:6333
-    volumes:
-      - langflow_data:/app/langflow
+    env_file:
+      - ./rag_agent_pipeline/.env
 
-  postgres:
-    image: postgres:16
-    container_name: langflow_postgres
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: langflow
-      POSTGRES_PASSWORD: langflow
-      POSTGRES_DB: langflow
+    ports:
+      - "11434:11434"
     volumes:
-      - langflow_postgres:/var/lib/postgresql/data
+      - ollama_data:/root/.ollama
 
   qdrant:
     image: qdrant/qdrant:v1.17.0
     container_name: qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"   # REST API
-      - "6334:6334"   # gRPC API
+      - "6333:6333"
+      - "6334:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
       - ./qdrant_config.yaml:/qdrant/config/production.yaml:ro
-    # Uncomment and set QDRANT_API_KEY in .env to enable API key auth
-    # environment:
-    #   - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333 && echo -e \"GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && grep -q passed <&3'"]
       interval: 30s
@@ -50,7 +45,5 @@ services:
 volumes:
   qdrant_storage:
     driver: local
-  langflow_data:
-    driver: local
-  langflow_postgres:
+  ollama_data:
     driver: local

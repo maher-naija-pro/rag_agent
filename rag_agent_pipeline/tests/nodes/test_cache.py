@@ -1,14 +1,13 @@
-"""Tests for nodes.cache — semantic cache check and store."""
+"""Tests for nodes.cache — semantic cache check and store (real FastEmbed)."""
 
 import sys
 import time
-from unittest.mock import MagicMock, patch
 
 import nodes.cache as cache_module
 
 
 class TestSemanticCache:
-    """Unit tests for the SemanticCache class — no mocks, pure logic."""
+    """Unit tests for the SemanticCache class — pure logic, no external services."""
 
     def test_store_and_lookup(self):
         cache = cache_module.SemanticCache()
@@ -32,8 +31,9 @@ class TestSemanticCache:
         cache = cache_module.SemanticCache()
         assert cache.lookup([1.0, 0.0]) is None
 
-    @patch.object(cache_module, "CACHE_TTL", 1)
-    def test_expired_entries_not_returned(self):
+    def test_expired_entries_not_returned(self, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_TTL", 1)
+
         cache = cache_module.SemanticCache()
         embedding = [1.0, 0.0]
 
@@ -43,8 +43,9 @@ class TestSemanticCache:
 
         assert cache.lookup(embedding) is None
 
-    @patch.object(cache_module, "CACHE_MAX_SIZE", 2)
-    def test_evicts_oldest_at_capacity(self):
+    def test_evicts_oldest_at_capacity(self, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_MAX_SIZE", 2)
+
         cache = cache_module.SemanticCache()
 
         cache.store([1.0, 0.0], "first", [1])
@@ -73,34 +74,28 @@ class TestSemanticCache:
 
 
 class TestCacheCheck:
-    """Tests for cache_check() node function.
+    """Tests for cache_check() node function using real FastEmbed embeddings."""
 
-    Mocks: EMBEDDINGS (external embedding API).
-    Never mocks: cache logic (our code under test).
-    """
+    def test_disabled_returns_miss(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", False)
 
-    @patch.object(cache_module, "CACHE_ENABLED", False)
-    def test_disabled_returns_miss(self, base_state):
         result = cache_module.cache_check(base_state(question="test"))
         assert result["cache_hit"] is False
 
-    @patch.object(cache_module, "CACHE_ENABLED", True)
-    @patch.object(cache_module, "EMBEDDINGS")
-    def test_miss_on_empty_cache(self, mock_embeddings, base_state):
+    def test_miss_on_empty_cache(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", True)
         cache_module._cache.clear()
-        mock_embeddings.embed_query.return_value = [1.0, 0.0, 0.0]
 
         result = cache_module.cache_check(base_state(question="new question"))
         assert result["cache_hit"] is False
 
-    @patch.object(cache_module, "CACHE_ENABLED", True)
-    @patch.object(cache_module, "EMBEDDINGS")
-    def test_hit_returns_cached_answer(self, mock_embeddings, base_state):
+    def test_hit_returns_cached_answer(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", True)
         cache_module._cache.clear()
-        embedding = [1.0, 0.0, 0.0]
-        mock_embeddings.embed_query.return_value = embedding
 
-        # Pre-populate cache
+        # Use real embeddings to embed and store
+        from config.embeddings import EMBEDDINGS
+        embedding = EMBEDDINGS.embed_query("same question")
         cache_module._cache.store(embedding, "cached answer", [1, 3])
 
         result = cache_module.cache_check(base_state(question="same question"))
@@ -108,10 +103,15 @@ class TestCacheCheck:
         assert result["cache_hit"] is True
         assert result["answer"] == "cached answer"
 
-    @patch.object(cache_module, "CACHE_ENABLED", True)
-    @patch.object(cache_module, "EMBEDDINGS")
-    def test_fallback_on_embedding_error(self, mock_embeddings, base_state):
-        mock_embeddings.embed_query.side_effect = RuntimeError("API down")
+    def test_fallback_on_embedding_error(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", True)
+
+        # Use a broken embeddings object
+        class BrokenEmbeddings:
+            def embed_query(self, text):
+                raise RuntimeError("API down")
+
+        monkeypatch.setattr(cache_module, "EMBEDDINGS", BrokenEmbeddings())
 
         result = cache_module.cache_check(base_state(question="test"))
         assert result["cache_hit"] is False
@@ -120,24 +120,23 @@ class TestCacheCheck:
 class TestCacheStore:
     """Tests for cache_store() node function."""
 
-    @patch.object(cache_module, "CACHE_ENABLED", False)
-    def test_disabled_does_nothing(self, base_state):
+    def test_disabled_does_nothing(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", False)
+
         result = cache_module.cache_store(base_state(question="test", answer="answer"))
         assert result == {}
 
-    @patch.object(cache_module, "CACHE_ENABLED", True)
-    def test_skips_on_cache_hit(self, base_state):
+    def test_skips_on_cache_hit(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", True)
+
         result = cache_module.cache_store(base_state(
             question="test", answer="answer", cache_hit=True,
         ))
         assert result == {}
 
-    @patch.object(cache_module, "CACHE_ENABLED", True)
-    @patch.object(cache_module, "EMBEDDINGS")
-    def test_stores_answer(self, mock_embeddings, base_state):
+    def test_stores_answer(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", True)
         cache_module._cache.clear()
-        embedding = [0.5, 0.5, 0.0]
-        mock_embeddings.embed_query.return_value = embedding
 
         cache_module.cache_store(base_state(
             question="my question",
@@ -147,16 +146,21 @@ class TestCacheStore:
 
         assert cache_module._cache.size == 1
 
-    @patch.object(cache_module, "CACHE_ENABLED", True)
-    def test_skips_empty_answer(self, base_state):
+    def test_skips_empty_answer(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", True)
+
         before = cache_module._cache.size
         cache_module.cache_store(base_state(question="test", answer="", cache_hit=False))
         assert cache_module._cache.size == before
 
-    @patch.object(cache_module, "CACHE_ENABLED", True)
-    @patch.object(cache_module, "EMBEDDINGS")
-    def test_fallback_on_embedding_error(self, mock_embeddings, base_state):
-        mock_embeddings.embed_query.side_effect = RuntimeError("API down")
+    def test_fallback_on_embedding_error(self, base_state, monkeypatch):
+        monkeypatch.setattr(cache_module, "CACHE_ENABLED", True)
+
+        class BrokenEmbeddings:
+            def embed_query(self, text):
+                raise RuntimeError("API down")
+
+        monkeypatch.setattr(cache_module, "EMBEDDINGS", BrokenEmbeddings())
 
         result = cache_module.cache_store(base_state(
             question="test", answer="answer", cache_hit=False,

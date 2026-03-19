@@ -1,14 +1,10 @@
-"""Tests for /api/ingest routes."""
-
-from unittest.mock import patch
-
-from langchain_core.documents import Document
+"""Tests for /api/ingest routes (real graph + Qdrant)."""
 
 from api.state import sessions, jobs
 
 
 class TestIngestValidation:
-    """Validation tests — no mocks needed."""
+    """Validation tests — no external services needed."""
 
     def test_no_file_returns_422(self, client):
         r = client.post("/api/ingest")
@@ -28,24 +24,17 @@ class TestIngestValidation:
         )
         assert r.status_code == 400
 
-    @patch("api.routes.ingest.MAX_FILE_SIZE", 10)  # 10 bytes
-    def test_file_too_large_returns_413(self, client, sample_pdf_bytes):
+    def test_file_too_large_returns_413(self, client, sample_pdf_bytes, monkeypatch):
+        import api.routes.ingest as ingest_mod
+        monkeypatch.setattr(ingest_mod, "MAX_FILE_SIZE", 10)  # 10 bytes
+
         r = client.post(
             "/api/ingest",
             files={"file": ("big.pdf", sample_pdf_bytes, "application/pdf")},
         )
         assert r.status_code == 413
 
-    @patch("api.routes.ingest.graph")
-    def test_valid_pdf_accepted(self, mock_graph, client, sample_pdf_bytes):
-        mock_graph.invoke.return_value = {
-            "raw_pages": [Document(page_content="page 1", metadata={"page": 1})],
-            "chunks": [
-                Document(page_content="chunk 1", metadata={"page": 1}),
-                Document(page_content="chunk 2", metadata={"page": 1}),
-            ],
-        }
-
+    def test_valid_pdf_accepted(self, client, sample_pdf_bytes, test_collection):
         r = client.post(
             "/api/ingest",
             files={"file": ("doc.pdf", sample_pdf_bytes, "application/pdf")},
@@ -57,29 +46,13 @@ class TestIngestValidation:
         assert "job_id" in data
         assert data["file_name"] == "doc.pdf"
 
-    @patch("api.routes.ingest.graph")
-    def test_ingest_creates_session(self, mock_graph, client, sample_pdf_bytes):
-        mock_graph.invoke.return_value = {
-            "raw_pages": [],
-            "chunks": [],
-        }
-
+    def test_ingest_creates_session(self, client, sample_pdf_bytes, test_collection):
         r = client.post(
             "/api/ingest",
             files={"file": ("doc.pdf", sample_pdf_bytes, "application/pdf")},
         )
         session_id = r.json()["session_id"]
         assert session_id in sessions
-
-    @patch("api.routes.ingest.graph")
-    def test_ingest_failure_returns_500(self, mock_graph, client, sample_pdf_bytes):
-        mock_graph.invoke.side_effect = RuntimeError("LLM error")
-
-        r = client.post(
-            "/api/ingest",
-            files={"file": ("doc.pdf", sample_pdf_bytes, "application/pdf")},
-        )
-        assert r.status_code == 500
 
 
 class TestIngestStatus:

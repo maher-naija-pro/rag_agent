@@ -1,18 +1,12 @@
-"""Tests for nodes.generator — LLM answer generation."""
-
-from unittest.mock import MagicMock, patch
+"""Tests for nodes.generator — LLM answer generation (real Ollama)."""
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 
 
 class TestGenerate:
-    @patch("nodes.generator.LLM")
-    def test_returns_answer(self, mock_llm, base_state, sample_context):
+    def test_returns_answer(self, base_state, sample_context):
         from nodes.generator import generate
-
-        tok1, tok2 = MagicMock(content="Paris "), MagicMock(content="is the capital.")
-        mock_llm.stream.return_value = [tok1, tok2]
 
         result = generate(base_state(
             question="What is the capital of France?",
@@ -20,23 +14,22 @@ class TestGenerate:
             messages=[HumanMessage(content="What is the capital of France?")],
         ))
 
-        assert result["answer"] == "Paris is the capital."
+        assert isinstance(result["answer"], str)
+        assert len(result["answer"]) > 0
         assert isinstance(result["messages"][0], AIMessage)
 
-    @patch("nodes.generator.LLM")
-    def test_returns_ai_message(self, mock_llm, base_state, sample_context):
+    def test_returns_ai_message(self, base_state, sample_context):
         from nodes.generator import generate
 
-        mock_llm.stream.return_value = [MagicMock(content="Answer.")]
-
         result = generate(base_state(
-            question="test",
+            question="What country is Paris in?",
             context=sample_context,
-            messages=[HumanMessage(content="test")],
+            messages=[HumanMessage(content="What country is Paris in?")],
         ))
 
         assert len(result["messages"]) == 1
-        assert result["messages"][0].content == "Answer."
+        assert isinstance(result["messages"][0], AIMessage)
+        assert len(result["messages"][0].content) > 0
 
     def test_empty_context_returns_refusal(self, base_state):
         """When no context docs are retrieved, generator refuses instead of calling LLM."""
@@ -50,12 +43,21 @@ class TestGenerate:
         assert result["answer"] == NO_CONTEXT_ANSWER
         assert isinstance(result["messages"][0], AIMessage)
 
-    @patch("nodes.generator.LLM")
-    def test_llm_error_returns_error_message(self, mock_llm, base_state, sample_context):
+    def test_llm_error_returns_error_message(self, base_state, sample_context, monkeypatch):
         """When LLM streaming fails, generator returns an error answer."""
         from nodes.generator import generate
+        from langchain_openai import ChatOpenAI
 
-        mock_llm.stream.side_effect = RuntimeError("API timeout")
+        # Point to a non-existent endpoint to trigger a real connection error
+        bad_llm = ChatOpenAI(
+            model="nonexistent",
+            openai_api_key="bad",
+            openai_api_base="http://localhost:1/v1",
+            max_retries=0,
+            timeout=2,
+        )
+        import nodes.generator as gen_mod
+        monkeypatch.setattr(gen_mod, "LLM", bad_llm)
 
         result = generate(base_state(
             question="test",

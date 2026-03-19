@@ -1,0 +1,40 @@
+services:
+  test-runner:
+    build:
+      context: ./rag_agent_pipeline
+      args:
+        REQUIREMENTS: requirements-test.txt
+    container_name: rag-test-runner
+    depends_on:
+      qdrant-test:
+        condition: service_healthy
+      ollama-test:
+        condition: service_started
+    environment:
+      - OLLAMA_BASE_URL=http://ollama-test:11434/v1
+      - LLM_MODEL=mistral:7b
+      - QDRANT_URL=http://qdrant-test:6333
+      - OPENAI_API_KEY=ollama
+    command: ["python", "-m", "pytest", "tests/", "-v", "--tb=short"]
+
+  qdrant-test:
+    image: qdrant/qdrant:v1.17.0
+    container_name: qdrant-test
+    tmpfs:
+      - /qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  ollama-test:
+    image: ollama/ollama:latest
+    container_name: ollama-test
+    volumes:
+      - ollama_test_data:/root/.ollama
+
+volumes:
+  ollama_test_data:
+    driver: local

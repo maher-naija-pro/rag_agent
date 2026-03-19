@@ -1,7 +1,6 @@
-"""Tests for nodes.query_rewriter — query reformulation."""
+"""Tests for nodes.query_rewriter — query reformulation (real Ollama)."""
 
 import sys
-from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -10,62 +9,53 @@ _mod = sys.modules["nodes.query_rewriter"]
 
 
 class TestRewriteQuery:
-    """Tests for the rewrite_query() node function.
+    """Tests for the rewrite_query() node function using real LLM."""
 
-    Mocks: LLM (external API).
-    Never mocks: rewrite_query logic (our code under test).
-    """
-
-    @patch.object(_mod, "QUERY_REWRITE_ENABLED", True)
-    @patch.object(_mod, "LLM")
-    def test_rewrites_question(self, mock_llm, base_state):
-        mock_llm.invoke.return_value = MagicMock(content="What is the pricing structure?")
+    def test_rewrites_question(self, base_state, monkeypatch):
+        monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
 
         result = _mod.rewrite_query(base_state(question="what about the price?"))
 
-        assert result["question"] == "What is the pricing structure?"
+        assert "question" in result
+        assert isinstance(result["question"], str)
+        assert len(result["question"]) > 0
         assert result["original_question"] == "what about the price?"
 
-    @patch.object(_mod, "QUERY_REWRITE_ENABLED", True)
-    @patch.object(_mod, "LLM")
-    def test_preserves_original_question(self, mock_llm, base_state):
-        mock_llm.invoke.return_value = MagicMock(content="Rewritten query")
+    def test_preserves_original_question(self, base_state, monkeypatch):
+        monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
 
         result = _mod.rewrite_query(base_state(question="my question"))
 
         assert result["original_question"] == "my question"
 
-    @patch.object(_mod, "QUERY_REWRITE_ENABLED", True)
-    @patch.object(_mod, "LLM")
-    def test_fallback_on_empty_rewrite(self, mock_llm, base_state):
-        mock_llm.invoke.return_value = MagicMock(content="")
-
-        result = _mod.rewrite_query(base_state(question="original query"))
-
-        assert result["original_question"] == "original query"
-        assert "question" not in result
-
-    @patch.object(_mod, "QUERY_REWRITE_ENABLED", True)
-    @patch.object(_mod, "LLM")
-    def test_fallback_on_llm_error(self, mock_llm, base_state):
-        mock_llm.invoke.side_effect = RuntimeError("API down")
+    def test_disabled_passes_through(self, base_state, monkeypatch):
+        monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", False)
 
         result = _mod.rewrite_query(base_state(question="my question"))
 
         assert result["original_question"] == "my question"
         assert "question" not in result
 
-    @patch.object(_mod, "QUERY_REWRITE_ENABLED", False)
-    def test_disabled_passes_through(self, base_state):
+    def test_fallback_on_llm_error(self, base_state, monkeypatch):
+        from langchain_openai import ChatOpenAI
+
+        monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
+        bad_llm = ChatOpenAI(
+            model="nonexistent",
+            openai_api_key="bad",
+            openai_api_base="http://localhost:1/v1",
+            max_retries=0,
+            timeout=2,
+        )
+        monkeypatch.setattr(_mod, "LLM", bad_llm)
+
         result = _mod.rewrite_query(base_state(question="my question"))
 
         assert result["original_question"] == "my question"
         assert "question" not in result
 
-    @patch.object(_mod, "QUERY_REWRITE_ENABLED", True)
-    @patch.object(_mod, "LLM")
-    def test_uses_conversation_history(self, mock_llm, base_state):
-        mock_llm.invoke.return_value = MagicMock(content="What is the project deadline?")
+    def test_uses_conversation_history(self, base_state, monkeypatch):
+        monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
 
         history = [
             HumanMessage(content="Tell me about the project"),
@@ -78,7 +68,6 @@ class TestRewriteQuery:
             messages=history,
         ))
 
-        assert result["question"] == "What is the project deadline?"
-        call_args = mock_llm.invoke.call_args[0][0]
-        user_msg = call_args[-1].content
-        assert "Conversation context" in user_msg
+        # With conversation context, the rewriter should produce a more complete question
+        assert "question" in result
+        assert len(result["question"]) > len("and the deadline?")

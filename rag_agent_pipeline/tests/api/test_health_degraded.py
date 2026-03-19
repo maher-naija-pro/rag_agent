@@ -1,16 +1,21 @@
-"""Tests for /api/health degraded path."""
+"""Tests for /api/health degraded path (real Qdrant client, bad endpoint)."""
 
-from unittest.mock import patch, MagicMock
+from qdrant_client import QdrantClient
 
 
 class TestHealthDegraded:
-    def test_qdrant_unreachable_returns_degraded(self, client):
-        """When Qdrant client raises, health returns degraded (not 500)."""
-        mock_client = MagicMock()
-        mock_client.get_collections.side_effect = ConnectionError("refused")
+    def test_qdrant_unreachable_returns_degraded(self, client, monkeypatch):
+        """When Qdrant client points to a bad endpoint, health returns degraded."""
+        bad_client = QdrantClient(url="http://localhost:1", timeout=1)
 
-        with patch("config.get_client", return_value=mock_client):
-            r = client.get("/api/health")
+        import config.qdrant as qdrant_mod
+        # Replace the singleton so get_client() returns the bad client
+        monkeypatch.setattr(qdrant_mod, "_client", bad_client)
+
+        import config as config_mod
+        monkeypatch.setattr(config_mod, "get_client", lambda: bad_client)
+
+        r = client.get("/api/health")
 
         assert r.status_code == 200
         data = r.json()
