@@ -1,0 +1,27 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "slow: marks tests that are slow (e.g. real OCR, network calls)",
+]
+
+[tool.coverage.run]
+source = ["nodes", "api", "config", "graph.py", "state.py", "logger"]
+omit = [
+    "tests/*",
+    "venv/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 60
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "pass",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

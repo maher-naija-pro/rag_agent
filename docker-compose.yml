@@ -1,0 +1,56 @@
+services:
+  langflow:
+    image: langflowai/langflow:1.8.1
+    container_name: langflow
+    restart: unless-stopped
+    user: root
+    ports:
+      - "7860:7860"
+    depends_on:
+      - qdrant
+      - postgres
+    environment:
+      - LANGFLOW_DATABASE_URL=postgresql://langflow:langflow@postgres:5432/langflow
+      - LANGFLOW_CONFIG_DIR=/app/langflow
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - langflow_data:/app/langflow
+
+  postgres:
+    image: postgres:16
+    container_name: langflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: langflow
+      POSTGRES_PASSWORD: langflow
+      POSTGRES_DB: langflow
+    volumes:
+      - langflow_postgres:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.0
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+      - ./qdrant_config.yaml:/qdrant/config/production.yaml:ro
+    # Uncomment and set QDRANT_API_KEY in .env to enable API key auth
+    # environment:
+    #   - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333 && echo -e \"GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && grep -q passed <&3'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  qdrant_storage:
+    driver: local
+  langflow_data:
+    driver: local
+  langflow_postgres:
+    driver: local

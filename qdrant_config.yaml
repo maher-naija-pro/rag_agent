@@ -1,0 +1,90 @@
+# Qdrant configuration — v1.17.0
+# Full reference: https://github.com/qdrant/qdrant/blob/master/config/config.yaml
+
+service:
+  # Host to bind the REST/gRPC servers to
+  host: 0.0.0.0
+  # REST API port
+  http_port: 6333
+  # gRPC API port
+  grpc_port: 6334
+  # Max number of concurrent requests (0 = unlimited)
+  max_request_size_mb: 32
+  # Enable CORS for REST API
+  enable_cors: true
+
+storage:
+  # Directory for storing collections data
+  storage_path: ./storage
+  # Directory for storing snapshots
+  snapshots_path: ./snapshots
+  # Soft limit on the number of open files (0 = OS default)
+  # on_disk_payload: true  # Store payload on disk instead of RAM
+
+  # Performance tuning for collections
+  performance:
+    # Number of parallel threads for indexing
+    max_search_threads: 0        # 0 = number of CPU cores
+    max_optimization_threads: 1  # Background optimization threads
+
+  # Write-ahead log settings
+  wal:
+    # WAL segment size in MB
+    wal_capacity_mb: 32
+    # Number of WAL segments to keep
+    wal_segments_ahead: 0
+
+  # Default collection parameters (overridable per collection)
+  optimizers:
+    # Minimum fraction of deleted vectors to trigger optimization
+    deleted_threshold: 0.2
+    # Minimum number of vectors for vacuum optimization
+    vacuum_min_vector_number: 1000
+    # Default number of segments per collection
+    default_segment_number: 0
+    # Max segment size in KB (0 = unlimited)
+    max_segment_size_kb: null
+    # Max memory usage for indexing in MB (0 = unlimited)
+    memmap_threshold_kb: null
+    # Threshold for switching to HNSW index
+    indexing_threshold_kb: 20000
+    # Flush interval in seconds
+    flush_interval_sec: 5
+    # Max optimizations per collection
+    max_optimization_threads: null
+
+  # HNSW index defaults
+  hnsw_index:
+    # Number of edges per node (higher = better recall, more memory)
+    m: 16
+    # Size of the dynamic candidate list during construction
+    ef_construct: 100
+    # Max HNSW threads (0 = number of CPU cores)
+    max_indexing_threads: 0
+    # Store HNSW index on disk
+    on_disk: false
+
+  # Quantization defaults (disabled by default)
+  # quantization:
+  #   scalar:
+  #     type: int8
+  #     quantile: 0.99
+  #     always_ram: true
+
+cluster:
+  # Set to true to enable distributed mode
+  enabled: false
+  # p2p:
+  #   port: 6335
+  # consensus:
+  #   tick_period_ms: 100
+
+# Telemetry (disable to opt out of anonymous usage stats)
+telemetry_disabled: false
+
+# TLS (disabled by default)
+# tls:
+#   cert: ./tls/cert.pem
+#   key: ./tls/key.pem
+#   ca_cert: ./tls/cacert.pem
+#   verify_https_client_certificate: false
