@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class ChatRequest(BaseModel):
-    """Body for POST /api/chat and POST /api/chat/stream."""
+    """Body for POST /api/chat."""
 
     session_id: str   # returned by POST /api/ingest
     question: str     # user's natural-language question

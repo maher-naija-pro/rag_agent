@@ -15,12 +15,13 @@ REWRITE_PROMPT = """\
 You are a query rewriter for a document search system.
 Rewrite the user's question to be clear, specific, and optimized for semantic search.
 
-Rules:
-- Keep the same language as the original question (French → French, English → English).
+CRITICAL RULES:
+- ALWAYS reply in the SAME language as the user's question. If the question is in French, rewrite in French. NEVER translate.
+- The documents being searched are PDFs (contracts, reports, meeting minutes, legal documents). Keep the rewrite relevant to document search.
 - Expand vague references ("it", "that", "this") using conversation history if available.
 - Add relevant synonyms or related terms when helpful.
 - Do NOT answer the question — only rewrite it.
-- Output ONLY the rewritten question, nothing else.
+- Output ONLY the rewritten question, nothing else. No explanation, no parentheses, no comments.
 """
 
 
@@ -59,6 +60,13 @@ def rewrite_query(state: RAGState) -> dict:
 
     try:
         rewritten = LLM.invoke(prompt).content.strip()
+
+        # Take only the first line (LLM sometimes adds explanations)
+        rewritten = rewritten.split("\n")[0].strip()
+
+        # Strip quotes if the LLM wrapped the rewrite
+        if rewritten.startswith('"') and rewritten.endswith('"'):
+            rewritten = rewritten[1:-1]
 
         # Guard: if LLM returns empty or something clearly wrong, keep original
         if not rewritten or len(rewritten) < 3:

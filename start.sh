@@ -17,8 +17,8 @@ done
 
 cleanup() {
     echo "Shutting down..."
-    kill "$API_PID" "$UI_PID" 2>/dev/null
-    wait "$API_PID" "$UI_PID" 2>/dev/null
+    kill "$UI_PID" 2>/dev/null
+    wait "$UI_PID" 2>/dev/null
     docker compose -f "$ROOT_DIR/docker-compose.yml" down
     echo "Stopped."
 }
@@ -33,15 +33,10 @@ if [ "$INSTALL" = true ]; then
     cd "$ROOT_DIR"
 fi
 
-# Start infrastructure
-echo "Starting Docker services (Qdrant, Postgres)..."
-docker compose -f "$ROOT_DIR/docker-compose.yml" up -d
-
-# Start API
-echo "Starting API server..."
-cd "$ROOT_DIR/rag_agent_pipeline"
-python main.py &
-API_PID=$!
+# Start infrastructure + API (rag-api runs inside Docker)
+echo "Starting Docker services (Qdrant, Ollama, API)..."
+docker compose -f "$ROOT_DIR/docker-compose.yml" up -d --build
+API_PID=""
 
 # Start UI
 echo "Starting UI dev server..."

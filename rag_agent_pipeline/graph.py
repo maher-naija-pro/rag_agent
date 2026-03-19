@@ -49,11 +49,9 @@ def build_graph(checkpointer: InMemorySaver):
         START
           │
           ▼
-      [router] ──── first turn ────► load_pdf → chunk → extract_metadata → embed_and_store ─┐
-          │                                                                                  │
-          └──── subsequent turns ────────────────────────────────────────────────────────────┤
-                                                                                             ▼
-                                                                                        cache_check
+      [router] ──── first turn ────► load_pdf → chunk → extract_metadata → embed_and_store → END
+          │
+          └──── subsequent turns ──► cache_check
                                                                                              │
                                                                               ┌── HIT ──────┤
                                                                               │              └── MISS ──┐
@@ -99,11 +97,11 @@ def build_graph(checkpointer: InMemorySaver):
         {"load_pdf": "load_pdf", "cache_check": "cache_check"},
     )
 
-    # Ingestion pipeline
+    # Ingestion pipeline — ends after storing, no query cycle
     graph.add_edge("load_pdf",          "chunk")
     graph.add_edge("chunk",             "extract_metadata")
     graph.add_edge("extract_metadata",  "embed_and_store")
-    graph.add_edge("embed_and_store",   "cache_check")
+    graph.add_edge("embed_and_store",   END)
 
     # Cache routing — hit skips to generate, miss continues pipeline
     graph.add_conditional_edges(

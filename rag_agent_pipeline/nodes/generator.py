@@ -14,9 +14,14 @@ from state import RAGState
 log = get_logger("nodes.generator")
 
 SYSTEM_TEMPLATE = """\
-You are a precise assistant. Answer only from the document excerpts below.
-If the answer is absent, say so — never fabricate.
-Cite the page number(s) you relied on, e.g. [page 3].
+You are a precise, concise assistant. Answer only from the document excerpts below.
+
+Rules:
+- Be SHORT and DIRECT. Answer the question in 1-3 sentences maximum.
+- Reply in the SAME language as the user's question (French → French, English → English).
+- Cite the page number(s), e.g. [page 3].
+- If the answer is absent, say so briefly — never fabricate.
+- Do NOT repeat or summarize the entire document. Only give what was asked.
 
 CONTEXT:
 {context}

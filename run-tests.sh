@@ -20,17 +20,13 @@ docker compose -f docker-compose.test.yml up -d --wait
 echo "▶ Ensuring Ollama model '${OLLAMA_MODEL}' is available…"
 docker compose -f docker-compose.test.yml exec ollama-test ollama pull "${OLLAMA_MODEL}"
 
-# ── Run tests ─────────────────────────────────────────────────────────────────
+# ── Run tests inside the test-runner container ───────────────────────────────
 echo "▶ Running pytest…"
-cd rag_agent_pipeline
-OLLAMA_BASE_URL="http://localhost:11434/v1" \
-LLM_MODEL="${OLLAMA_MODEL}" \
-QDRANT_URL="http://localhost:6333" \
-python -m pytest "${@:---tb=short -q}"
+docker compose -f docker-compose.test.yml run --rm --build test-runner \
+  python -m pytest "${@:---tb=short -q}"
 EXIT_CODE=$?
 
 # ── Tear down ─────────────────────────────────────────────────────────────────
-cd ..
 echo "▶ Stopping test services…"
 docker compose -f docker-compose.test.yml down
 

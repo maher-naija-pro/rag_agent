@@ -1,4 +1,4 @@
-"""Tests for /api/chat and /api/chat/stream routes.
+"""Tests for POST /api/chat route (true token-by-token SSE streaming).
 
 Default mode: LLM is auto-mocked.  With --llm: real Ollama.
 """
@@ -21,17 +21,6 @@ class TestChatValidation:
     def test_empty_question_returns_400(self, client):
         sessions["s1"] = {"thread_id": "t1", "document_id": "d1", "file_name": "f.pdf"}
         r = client.post("/api/chat", json={"session_id": "s1", "question": "  "})
-        assert r.status_code == 400
-
-
-class TestChatStreamValidation:
-    def test_unknown_session_returns_404(self, client):
-        r = client.post("/api/chat/stream", json={"session_id": "nope", "question": "hello"})
-        assert r.status_code == 404
-
-    def test_empty_question_returns_400(self, client):
-        sessions["s1"] = {"thread_id": "t1", "document_id": "d1", "file_name": "f.pdf"}
-        r = client.post("/api/chat/stream", json={"session_id": "s1", "question": ""})
         assert r.status_code == 400
 
 
@@ -60,20 +49,3 @@ class TestChatSSE:
         has_done = '"type":"done"' in body or '"type": "done"' in body
         has_error = '"type":"error"' in body or '"type": "error"' in body
         assert has_done or has_error
-
-
-@pytest.mark.llm
-class TestChatStreamSSE:
-    def test_stream_tokens(self, client, ingested_session):
-        session_id, _ = ingested_session
-
-        r = client.post("/api/chat/stream", json={"session_id": session_id, "question": "What is this about?"})
-        assert r.status_code == 200
-        assert r.headers["content-type"].startswith("text/event-stream")
-
-        body = r.text
-        assert "data:" in body
-        has_token = '"type": "token"' in body or '"type":"token"' in body
-        has_done = '"type": "done"' in body or '"type":"done"' in body
-        has_error = '"type": "error"' in body or '"type":"error"' in body
-        assert has_token or has_done or has_error

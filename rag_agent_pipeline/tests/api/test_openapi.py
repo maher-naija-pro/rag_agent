@@ -19,6 +19,5 @@ class TestOpenAPI:
         paths = list(client.get("/openapi.json").json()["paths"].keys())
         assert "/api/ingest" in paths
         assert "/api/chat" in paths
-        assert "/api/chat/stream" in paths
         assert "/api/documents" in paths
         assert "/api/health" in paths
