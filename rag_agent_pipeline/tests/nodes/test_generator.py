@@ -1,9 +1,15 @@
-"""Tests for nodes.generator — LLM answer generation (real Ollama)."""
+"""Tests for nodes.generator — LLM answer generation.
 
+Default mode: LLM is auto-mocked (returns "Mocked answer from LLM.").
+With --llm: runs against real Ollama.
+"""
+
+import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 
 
+@pytest.mark.llm
 class TestGenerate:
     def test_returns_answer(self, base_state, sample_context):
         from nodes.generator import generate
@@ -48,7 +54,6 @@ class TestGenerate:
         from nodes.generator import generate
         from langchain_openai import ChatOpenAI
 
-        # Point to a non-existent endpoint to trigger a real connection error
         bad_llm = ChatOpenAI(
             model="nonexistent",
             openai_api_key="bad",

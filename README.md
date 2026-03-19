@@ -32,7 +32,7 @@ rag_agent_pipeline/       # Python backend
   tests/                  # pytest suite
 evaluation/               # RAGAS eval framework
 UI/                       # Next.js frontend
-docker-compose.yml        # Qdrant + Postgres
+docker-compose.yml        # Qdrant + Ollama (GPU-enabled)
 ```
 
 ## API
@@ -58,6 +58,11 @@ Everything is configured via env vars in `.env`. The main knobs:
 - `QUERY_REWRITE_ENABLED`, `HYDE_ENABLED` — query optimization toggles
 - `OCR_LANGUAGES` — Tesseract languages (`fra+eng`)
 
+## GPU support
+
+Ollama is configured to use NVIDIA GPUs for inferece for test 
+
+
 ## Evaluation
 
 ```bash
@@ -67,6 +72,9 @@ Everything is configured via env vars in `.env`. The main knobs:
 ```
 
 Metrics docs in `evaluation/METRICS.md`.
+
+
+The Dockerfile uses a `REQUIREMENTS` build arg to select which file to install (defaults to `requirements.txt` for production).
 
 ## Tests
 

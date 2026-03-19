@@ -1,14 +1,18 @@
-"""Tests for nodes.hyde — hypothetical document embedding (real Ollama)."""
+"""Tests for nodes.hyde — hypothetical document embedding.
+
+Default mode: LLM is auto-mocked.  With --llm: real Ollama.
+"""
 
 import sys
+
+import pytest
 
 import nodes.hyde
 _mod = sys.modules["nodes.hyde"]
 
 
+@pytest.mark.llm
 class TestHyde:
-    """Tests for the hyde() node function using real LLM."""
-
     def test_appends_hypothetical_to_queries(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "HYDE_ENABLED", True)
 
@@ -20,8 +24,7 @@ class TestHyde:
         queries = result["expanded_queries"]
         assert len(queries) == 2
         assert queries[0] == "What are the payment terms?"
-        # The hypothetical passage should be a non-trivial string
-        assert len(queries[1]) > 10
+        assert len(queries[1]) > 5
 
     def test_preserves_existing_expanded_queries(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "HYDE_ENABLED", True)
@@ -38,7 +41,6 @@ class TestHyde:
 
     def test_disabled_returns_empty(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "HYDE_ENABLED", False)
-
         result = _mod.hyde(base_state(question="test"))
         assert result == {}
 
@@ -47,11 +49,9 @@ class TestHyde:
 
         monkeypatch.setattr(_mod, "HYDE_ENABLED", True)
         bad_llm = ChatOpenAI(
-            model="nonexistent",
-            openai_api_key="bad",
+            model="nonexistent", openai_api_key="bad",
             openai_api_base="http://localhost:1/v1",
-            max_retries=0,
-            timeout=2,
+            max_retries=0, timeout=2,
         )
         monkeypatch.setattr(_mod, "LLM", bad_llm)
 

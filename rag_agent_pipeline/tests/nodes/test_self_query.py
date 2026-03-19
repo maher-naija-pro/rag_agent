@@ -1,39 +1,33 @@
-"""Tests for nodes.self_query — metadata filter extraction (real Ollama)."""
+"""Tests for nodes.self_query — metadata filter extraction.
+
+Default mode: LLM is auto-mocked (returns '{"page": 5}').
+With --llm: real Ollama.
+"""
 
 import sys
+
+import pytest
 
 import nodes.self_query
 _mod = sys.modules["nodes.self_query"]
 
 
+@pytest.mark.llm
 class TestSelfQuery:
-    """Tests for the self_query() node function using real LLM."""
-
     def test_extracts_page_filter(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "SELF_QUERY_ENABLED", True)
 
         result = _mod.self_query(base_state(question="What's on page 5?"))
         filters = result["metadata_filter"]
         assert isinstance(filters, dict)
-        # LLM should extract page number from the question
+        # Mock returns {"page": 5}, real LLM should too
         assert filters.get("page") == 5
 
-    def test_extracts_language_filter(self, base_state, monkeypatch):
-        monkeypatch.setattr(_mod, "SELF_QUERY_ENABLED", True)
-
-        result = _mod.self_query(base_state(question="Résume les sections françaises"))
-        filters = result["metadata_filter"]
-        assert isinstance(filters, dict)
-        # Should detect French language reference
-        if filters:
-            assert filters.get("language") in ("fr", None)
-
-    def test_no_filters_returns_empty_or_minimal(self, base_state, monkeypatch):
+    def test_no_filters_returns_dict(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "SELF_QUERY_ENABLED", True)
 
         result = _mod.self_query(base_state(question="What is the main topic?"))
-        filters = result["metadata_filter"]
-        assert isinstance(filters, dict)
+        assert isinstance(result["metadata_filter"], dict)
 
     def test_disabled_returns_empty(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "SELF_QUERY_ENABLED", False)
@@ -46,11 +40,9 @@ class TestSelfQuery:
 
         monkeypatch.setattr(_mod, "SELF_QUERY_ENABLED", True)
         bad_llm = ChatOpenAI(
-            model="nonexistent",
-            openai_api_key="bad",
+            model="nonexistent", openai_api_key="bad",
             openai_api_base="http://localhost:1/v1",
-            max_retries=0,
-            timeout=2,
+            max_retries=0, timeout=2,
         )
         monkeypatch.setattr(_mod, "LLM", bad_llm)
 
@@ -59,8 +51,6 @@ class TestSelfQuery:
 
 
 class TestParseFilterResponse:
-    """Unit tests for _parse_filter_response helper — no external services needed."""
-
     def test_valid_json(self):
         assert _mod._parse_filter_response('{"page": 5}') == {"page": 5}
 

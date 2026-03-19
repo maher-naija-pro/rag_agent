@@ -1,5 +1,9 @@
-"""Tests for /api/chat and /api/chat/stream routes (real services)."""
+"""Tests for /api/chat and /api/chat/stream routes.
 
+Default mode: LLM is auto-mocked.  With --llm: real Ollama.
+"""
+
+import pytest
 from api.state import sessions
 
 
@@ -21,8 +25,6 @@ class TestChatValidation:
 
 
 class TestChatStreamValidation:
-    """Validation tests for /api/chat/stream — no external services needed."""
-
     def test_unknown_session_returns_404(self, client):
         r = client.post("/api/chat/stream", json={"session_id": "nope", "question": "hello"})
         assert r.status_code == 404
@@ -33,8 +35,9 @@ class TestChatStreamValidation:
         assert r.status_code == 400
 
 
+@pytest.mark.llm
 class TestChatSSE:
-    """SSE streaming tests using real graph + Ollama + Qdrant."""
+    """SSE streaming tests — uses ingested_session which runs the full pipeline."""
 
     def test_streams_tokens(self, client, ingested_session):
         session_id, _ = ingested_session
@@ -45,10 +48,8 @@ class TestChatSSE:
 
         body = r.text
         assert "data:" in body
-        # Should have token and done events
         has_token = '"type":"token"' in body or '"type": "token"' in body
         has_done = '"type":"done"' in body or '"type": "done"' in body
-        # Allow error event as alternative (LLM may not find context)
         has_error = '"type":"error"' in body or '"type": "error"' in body
         assert has_done or has_error or has_token
 
@@ -56,15 +57,13 @@ class TestChatSSE:
         session_id, _ = ingested_session
 
         body = client.post("/api/chat", json={"session_id": session_id, "question": "What content is here?"}).text
-        # Should have either sources or done event
         has_done = '"type":"done"' in body or '"type": "done"' in body
         has_error = '"type":"error"' in body or '"type": "error"' in body
         assert has_done or has_error
 
 
+@pytest.mark.llm
 class TestChatStreamSSE:
-    """Tests for /api/chat/stream — true token-by-token streaming with real services."""
-
     def test_stream_tokens(self, client, ingested_session):
         session_id, _ = ingested_session
 

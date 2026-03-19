@@ -1,13 +1,15 @@
 """Shared fixtures and environment setup for all tests.
 
-All external services (Qdrant, Ollama) run via docker-compose.test.yml.
-No unittest.mock — tests hit real services.
+Two modes:
+  pytest tests/               → default: LLM is mocked, no Ollama needed
+  pytest tests/ --llm         → integration: real Ollama required
 """
 
 import os
 import tempfile
 import time
 import uuid
+from unittest.mock import MagicMock
 
 # Configure services BEFORE importing any pipeline modules.
 os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434/v1")
@@ -19,6 +21,25 @@ import pytest
 import fitz
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
+
+
+# ── CLI option ────────────────────────────────────────────────────────────────
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--llm", action="store_true", default=False,
+        help="Run tests against a real LLM (Ollama). Without this flag, LLM calls are mocked.",
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "llm: test requires a real LLM")
+
+
+def pytest_collection_modifyitems(config, items):
+    """In default mode, auto-mock LLM for @pytest.mark.llm tests instead of skipping."""
+    # Nothing to skip — we handle mocking in the fixture below.
+    pass
 
 
 # ── Service readiness ─────────────────────────────────────────────────────────
@@ -34,12 +55,9 @@ def _url_ready(url: str, timeout: float = 2) -> bool:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def wait_for_services():
-    """Block until Qdrant and Ollama are reachable."""
+def wait_for_services(request):
+    """Block until Qdrant is reachable.  Ollama is only checked when --llm is set."""
     qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
-    ollama_base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-    # Derive Ollama root URL (strip /v1 suffix) for the tags endpoint
-    ollama_root = ollama_base.replace("/v1", "")
 
     for _ in range(60):
         if _url_ready(f"{qdrant_url}/healthz"):
@@ -48,12 +66,15 @@ def wait_for_services():
     else:
         pytest.fail(f"Qdrant not ready after 60 s ({qdrant_url})")
 
-    for _ in range(60):
-        if _url_ready(f"{ollama_root}/api/tags"):
-            break
-        time.sleep(1)
-    else:
-        pytest.fail(f"Ollama not ready after 60 s ({ollama_root})")
+    if request.config.getoption("--llm"):
+        ollama_base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+        ollama_root = ollama_base.replace("/v1", "")
+        for _ in range(60):
+            if _url_ready(f"{ollama_root}/api/tags"):
+                break
+            time.sleep(1)
+        else:
+            pytest.fail(f"Ollama not ready after 60 s ({ollama_root})")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -62,6 +83,51 @@ def warmup_embeddings(wait_for_services):
     from config.embeddings import EMBEDDINGS, SPARSE_EMBEDDINGS
     EMBEDDINGS.embed_query("warmup")
     SPARSE_EMBEDDINGS.embed_query("warmup")
+
+
+# ── LLM mock (default mode) ──────────────────────────────────────────────────
+
+def _make_fake_llm():
+    """Return a MagicMock that behaves like ChatOpenAI for basic invoke/stream."""
+    fake = MagicMock()
+    fake.invoke.return_value = MagicMock(content='{"page": 5}')
+
+    def _stream(prompt, **kw):
+        yield MagicMock(content="Mocked answer from LLM.")
+    fake.stream.side_effect = _stream
+    return fake
+
+
+@pytest.fixture(autouse=True)
+def _auto_mock_llm(request, monkeypatch):
+    """When --llm is NOT passed, replace LLM with a mock in every module that uses it.
+
+    Tests marked @pytest.mark.llm get the mock automatically in default mode.
+    Tests NOT marked llm never touch the LLM so the mock is harmless.
+    """
+    if request.config.getoption("--llm"):
+        return  # real LLM mode — do nothing
+
+    fake = _make_fake_llm()
+
+    import sys
+
+    # Patch LLM everywhere it is imported.
+    # Use sys.modules because nodes/__init__.py re-exports functions
+    # that shadow the module names (e.g. nodes.hyde is the function, not the module).
+    module_keys = [
+        "config.llm",
+        "nodes.generator",
+        "nodes.hyde",
+        "nodes.query_rewriter",
+        "nodes.query_expander",
+        "nodes.self_query",
+        "api.routes.chat",
+    ]
+    for key in module_keys:
+        mod = sys.modules.get(key)
+        if mod and hasattr(mod, "LLM"):
+            monkeypatch.setattr(mod, "LLM", fake)
 
 
 # ── Qdrant isolation ─────────────────────────────────────────────────────────

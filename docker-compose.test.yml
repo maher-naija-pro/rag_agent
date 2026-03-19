@@ -8,11 +8,11 @@ services:
     depends_on:
       qdrant-test:
         condition: service_healthy
-      ollama-test:
-        condition: service_started
+      ollama-pull-test:
+        condition: service_completed_successfully
     environment:
       - OLLAMA_BASE_URL=http://ollama-test:11434/v1
-      - LLM_MODEL=mistral:7b
+      - LLM_MODEL=${LLM_MODEL:-mistral:7b}
       - QDRANT_URL=http://qdrant-test:6333
       - OPENAI_API_KEY=ollama
     command: ["python", "-m", "pytest", "tests/", "-v", "--tb=short"]
@@ -32,8 +32,33 @@ services:
   ollama-test:
     image: ollama/ollama:latest
     container_name: ollama-test
+    runtime: nvidia
     volumes:
       - ollama_test_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  ollama-pull-test:
+    image: ollama/ollama:latest
+    container_name: ollama-pull-test
+    depends_on:
+      ollama-test:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama-test:11434
+    entrypoint: ["ollama", "pull", "${LLM_MODEL:-mistral:7b}"]
+    restart: "no"
 
 volumes:
   ollama_test_data:

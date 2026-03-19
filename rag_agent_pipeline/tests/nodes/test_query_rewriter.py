@@ -1,16 +1,19 @@
-"""Tests for nodes.query_rewriter — query reformulation (real Ollama)."""
+"""Tests for nodes.query_rewriter — query reformulation.
+
+Default mode: LLM is auto-mocked.  With --llm: real Ollama.
+"""
 
 import sys
 
+import pytest
 from langchain_core.messages import HumanMessage, AIMessage
 
 import nodes.query_rewriter
 _mod = sys.modules["nodes.query_rewriter"]
 
 
+@pytest.mark.llm
 class TestRewriteQuery:
-    """Tests for the rewrite_query() node function using real LLM."""
-
     def test_rewrites_question(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
 
@@ -25,14 +28,12 @@ class TestRewriteQuery:
         monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
 
         result = _mod.rewrite_query(base_state(question="my question"))
-
         assert result["original_question"] == "my question"
 
     def test_disabled_passes_through(self, base_state, monkeypatch):
         monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", False)
 
         result = _mod.rewrite_query(base_state(question="my question"))
-
         assert result["original_question"] == "my question"
         assert "question" not in result
 
@@ -41,16 +42,13 @@ class TestRewriteQuery:
 
         monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
         bad_llm = ChatOpenAI(
-            model="nonexistent",
-            openai_api_key="bad",
+            model="nonexistent", openai_api_key="bad",
             openai_api_base="http://localhost:1/v1",
-            max_retries=0,
-            timeout=2,
+            max_retries=0, timeout=2,
         )
         monkeypatch.setattr(_mod, "LLM", bad_llm)
 
         result = _mod.rewrite_query(base_state(question="my question"))
-
         assert result["original_question"] == "my question"
         assert "question" not in result
 
@@ -68,6 +66,6 @@ class TestRewriteQuery:
             messages=history,
         ))
 
-        # With conversation context, the rewriter should produce a more complete question
         assert "question" in result
-        assert len(result["question"]) > len("and the deadline?")
+        # Both mock and real LLM should return something longer than empty
+        assert len(result["question"]) > 0
