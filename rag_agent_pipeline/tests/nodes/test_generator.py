@@ -83,8 +83,33 @@ class TestFormatDocs:
             Document(page_content="World", metadata={"page": 2}),
         ]
         result = _format_docs(docs)
-        assert "[page 1]" in result and "Hello" in result
-        assert "[page 2]" in result and "World" in result
+        assert "[page 1" in result and "Hello" in result
+        assert "[page 2" in result and "World" in result
+
+    def test_includes_line_numbers_single_line(self):
+        """When line_start == line_end, format shows 'ligne X'."""
+        from nodes.generator import _format_docs
+
+        docs = [Document(page_content="Hello", metadata={"page": 3, "line_start": 7, "line_end": 7})]
+        result = _format_docs(docs)
+        assert "[page 3, ligne 7]" in result
+
+    def test_includes_line_range(self):
+        """When line_start != line_end, format shows 'lignes X-Y'."""
+        from nodes.generator import _format_docs
+
+        docs = [Document(page_content="Multi\nline", metadata={"page": 2, "line_start": 5, "line_end": 8})]
+        result = _format_docs(docs)
+        assert "[page 2, lignes 5-8]" in result
+
+    def test_no_line_metadata_falls_back_to_page_only(self):
+        """Without line_start metadata, format shows only page."""
+        from nodes.generator import _format_docs
+
+        docs = [Document(page_content="Text", metadata={"page": 4})]
+        result = _format_docs(docs)
+        assert "[page 4]" in result
+        assert "ligne" not in result
 
     def test_fallback_page(self):
         from nodes.generator import _format_docs

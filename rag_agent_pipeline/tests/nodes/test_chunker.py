@@ -37,6 +37,59 @@ class TestChunk:
         chunks = chunk(base_state(raw_pages=pages))["chunks"]
         assert len(chunks) == 1
 
+    def test_chunks_have_line_start_metadata(self, base_state):
+        """Every chunk must have a line_start metadata field (1-indexed)."""
+        from nodes.chunker import chunk
+
+        pages = [Document(
+            page_content="Line one\nLine two\nLine three\nLine four\nLine five",
+            metadata={"page": 1, "source": "test.pdf"},
+        )]
+        chunks = chunk(base_state(raw_pages=pages))["chunks"]
+        assert len(chunks) >= 1
+        for c in chunks:
+            assert "line_start" in c.metadata, f"Missing line_start in {c.metadata}"
+            assert isinstance(c.metadata["line_start"], int)
+            assert c.metadata["line_start"] >= 1
+
+    def test_chunks_have_line_end_metadata(self, base_state):
+        """Every chunk must have a line_end metadata field >= line_start."""
+        from nodes.chunker import chunk
+
+        pages = [Document(
+            page_content="First line\nSecond line\nThird line",
+            metadata={"page": 1, "source": "test.pdf"},
+        )]
+        chunks = chunk(base_state(raw_pages=pages))["chunks"]
+        for c in chunks:
+            assert "line_end" in c.metadata, f"Missing line_end in {c.metadata}"
+            assert c.metadata["line_end"] >= c.metadata["line_start"]
+
+    def test_line_numbers_are_sequential_across_chunks(self, base_state):
+        """Chunks from the same page should have increasing line_start values."""
+        from nodes.chunker import chunk
+
+        text = "\n".join(f"This is line number {i} with enough text." for i in range(1, 51))
+        pages = [Document(page_content=text, metadata={"page": 1, "source": "test.pdf"})]
+        chunks = chunk(base_state(raw_pages=pages))["chunks"]
+
+        if len(chunks) > 1:
+            line_starts = [c.metadata["line_start"] for c in chunks]
+            # line_start should be non-decreasing (overlap may cause equal values)
+            for i in range(1, len(line_starts)):
+                assert line_starts[i] >= line_starts[i - 1], (
+                    f"line_start went backwards: {line_starts[i-1]} -> {line_starts[i]}"
+                )
+
+    def test_single_line_chunk_has_equal_start_end(self, base_state):
+        """A chunk with no newlines should have line_start == line_end."""
+        from nodes.chunker import chunk
+
+        pages = [Document(page_content="Just one line here.", metadata={"page": 1, "source": "test.pdf"})]
+        chunks = chunk(base_state(raw_pages=pages))["chunks"]
+        assert len(chunks) == 1
+        assert chunks[0].metadata["line_start"] == chunks[0].metadata["line_end"]
+
     def test_chunking_exception_returns_empty(self, base_state, monkeypatch):
         """When the splitter raises an error, chunk() returns an empty list gracefully."""
         from nodes.chunker import chunk
