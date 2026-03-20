@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+# Importation des types de messages LangChain
 from langchain_core.messages import HumanMessage, SystemMessage
 
+# Importation du modèle de langage configuré
 from config import LLM
+# Drapeau pour activer/désactiver la réécriture de requête
 from config.pipeline import QUERY_REWRITE_ENABLED
-from logger import get_logger
+# Importation du logger et de la fonction de représentation détaillée
+from logger import get_logger, deep_repr
+# Importation du type d'état du pipeline RAG
 from state import RAGState
 
+# Initialisation du logger pour ce module
 log = get_logger("nodes.query_rewriter")
 
+# Prompt système qui guide le LLM pour réécrire la question de l'utilisateur
 REWRITE_PROMPT = """\
 You are a query rewriter for a document search system.
 Rewrite the user's question to be clear, specific, and optimized for semantic search.
@@ -33,52 +40,90 @@ def rewrite_query(state: RAGState) -> dict:
     - Replaces question with a clearer, search-optimized version
     - Skipped when QUERY_REWRITE_ENABLED=false
     """
+    # Journalisation de l'état d'entrée pour le débogage
+    log.debug("[INPUT] rewrite_query:\n%s", deep_repr(dict(state)))
+    # Récupération de la question de l'utilisateur depuis l'état
     question = state["question"]
 
+    # Vérification si la réécriture est désactivée dans la configuration
     if not QUERY_REWRITE_ENABLED:
         log.debug("Query rewriting disabled — passing through")
-        return {"original_question": question}
+        # Retour de la question originale sans modification
+        result = {"original_question": question}
+        # Journalisation du résultat de sortie
+        log.debug("[OUTPUT] rewrite_query:\n%s", deep_repr(result))
+        return result
 
-    # Build context from conversation history
+    # Construction du contexte à partir de l'historique de conversation
+    # Récupération de l'historique des messages
     history = state.get("messages", [])
+    # Initialisation du contexte d'historique vide
     history_context = ""
+    # Vérification s'il y a plus d'un message dans l'historique
     if len(history) > 1:
-        recent = history[-4:]  # last 2 turns max
+        # Extraction des 4 derniers messages (2 tours de conversation max)
+        recent = history[-4:]
+        # Concaténation des messages récents en texte formaté
         history_context = "\n".join(
+            # Formatage avec rôle et contenu tronqué à 200 caractères
             f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content[:200]}"
             for m in recent
         )
 
+    # Initialisation du message utilisateur avec la question brute
     user_msg = question
+    # Si un contexte d'historique existe, on l'ajoute au message
     if history_context:
+        # Assemblage du contexte et de la question
         user_msg = f"Conversation context:\n{history_context}\n\nQuestion to rewrite:\n{question}"
 
+    # Construction du prompt complet pour le LLM
     prompt = [
+        # Message système avec les instructions de réécriture
         SystemMessage(content=REWRITE_PROMPT),
+        # Message utilisateur contenant la question à réécrire
         HumanMessage(content=user_msg),
     ]
 
     try:
+        # Appel au LLM et nettoyage de la réponse
         rewritten = LLM.invoke(prompt).content.strip()
 
-        # Take only the first line (LLM sometimes adds explanations)
+        # Conservation uniquement de la première ligne (le LLM ajoute parfois des explications)
         rewritten = rewritten.split("\n")[0].strip()
 
-        # Strip quotes if the LLM wrapped the rewrite
+        # Suppression des guillemets si le LLM a encadré la réécriture
+        # Détection des guillemets doubles autour du texte
         if rewritten.startswith('"') and rewritten.endswith('"'):
+            # Retrait des guillemets
             rewritten = rewritten[1:-1]
 
-        # Guard: if LLM returns empty or something clearly wrong, keep original
+        # Protection : si le LLM retourne un résultat vide ou trop court, on garde l'original
+        # Vérification de la validité de la réécriture
         if not rewritten or len(rewritten) < 3:
             log.warning("Rewrite returned empty — keeping original")
-            return {"original_question": question}
+            # Retour de la question originale en cas de résultat invalide
+            result = {"original_question": question}
+            log.debug("[OUTPUT] rewrite_query:\n%s", deep_repr(result))
+            return result
 
+        # Journalisation de la transformation effectuée
         log.info("Rewrite: '%s' → '%s'", question[:50], rewritten[:50])
-        return {
+        result = {
+            # Sauvegarde de la question originale
             "original_question": question,
+            # Remplacement par la question réécrite et optimisée
             "question": rewritten,
         }
+        # Journalisation du résultat de sortie
+        log.debug("[OUTPUT] rewrite_query:\n%s", deep_repr(result))
+        return result
 
+    # Capture de toute exception lors de la réécriture
     except Exception as e:
+        # Journalisation de l'erreur
         log.warning("Query rewrite failed: %s — keeping original", e)
-        return {"original_question": question}
+        # Retour de la question originale en cas d'erreur
+        result = {"original_question": question}
+        log.debug("[OUTPUT] rewrite_query:\n%s", deep_repr(result))
+        return result
