@@ -41,6 +41,37 @@ def chunk(state: RAGState) -> dict:
         )
         # Découpage des documents en morceaux avec conservation des métadonnées
         chunks = splitter.split_documents(raw_pages)
+
+        # Enrichit chaque chunk avec line_start et line_end.
+        # On indexe le texte original de chaque page, puis on localise
+        # chaque chunk dedans pour calculer les numéros de ligne.
+        page_texts: dict[int, str] = {}
+        page_search_offset: dict[int, int] = {}
+        for p in raw_pages:
+            pg = p.metadata.get("page", 0)
+            if pg not in page_texts:
+                page_texts[pg] = p.page_content
+                page_search_offset[pg] = 0
+
+        for c in chunks:
+            pg = c.metadata.get("page", 0)
+            full_text = page_texts.get(pg, "")
+            # Cherche à partir du dernier offset pour gérer les doublons
+            start_from = page_search_offset.get(pg, 0)
+            # Utilise les 60 premiers chars (assez pour un match unique)
+            needle = c.page_content[:60].strip()
+            idx = full_text.find(needle, start_from) if needle else -1
+            if idx >= 0:
+                line_start = full_text[:idx].count("\n") + 1
+                line_end = line_start + c.page_content.count("\n")
+                # Avance l'offset pour le prochain chunk de la même page
+                page_search_offset[pg] = idx + len(needle)
+            else:
+                line_start = 1
+                line_end = 1 + c.page_content.count("\n")
+            c.metadata["line_start"] = line_start
+            c.metadata["line_end"] = line_end
+
     except Exception as e:
         log.error("Chunking failed: %s", e)
         result = {"chunks": []}

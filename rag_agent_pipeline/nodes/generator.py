@@ -27,7 +27,7 @@ You are a precise, concise assistant. Answer only from the document excerpts bel
 Rules:
 - Be SHORT and DIRECT. Answer the question in 1-3 sentences maximum.
 - Reply in the SAME language as the user's question (French → French, English → English).
-- Cite the page number(s), e.g. [page 3].
+- Cite page and line numbers exactly as shown in the context, e.g. [page 3, ligne 12] or [page 3, lignes 5-8]. If no line info, use [page 3].
 - If the answer is absent, say so briefly — never fabricate.
 - Do NOT repeat or summarize the entire document. Only give what was asked.
 
@@ -43,12 +43,20 @@ NO_CONTEXT_ANSWER = (
 
 
 def _format_docs(docs: list[Document]) -> str:
-    """Render a list of documents into a single context string with page citations."""
-    # Concaténation des documents avec un séparateur visuel
-    return "\n\n---\n\n".join(
-        # Formatage de chaque document avec son numéro de page
-        f"[page {d.metadata.get('page', '?')}]\n{d.page_content}" for d in docs
-    )
+    """Render a list of documents into a single context string with page + line citations."""
+    parts: list[str] = []
+    for d in docs:
+        page = d.metadata.get("page", "?")
+        line_start = d.metadata.get("line_start")
+        line_end = d.metadata.get("line_end")
+        if line_start and line_end and line_start != line_end:
+            ref = f"[page {page}, lignes {line_start}-{line_end}]"
+        elif line_start:
+            ref = f"[page {page}, ligne {line_start}]"
+        else:
+            ref = f"[page {page}]"
+        parts.append(f"{ref}\n{d.page_content}")
+    return "\n\n---\n\n".join(parts)
 
 
 def generate(state: RAGState) -> dict:

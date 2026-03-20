@@ -196,14 +196,22 @@ async def chat(req: ChatRequest):
             # Filtre les documents sous le seuil de score
             context_docs = _filter_by_score(context_docs, RERANK_SCORE_THRESHOLD)
 
-            # Extrait et trie les numéros de pages sources uniques
-            source_pages = sorted(
-                set(
-                    d.metadata.get("page", 0)
-                    for d in context_docs
-                    if d.metadata.get("page")
-                )
-            )
+            # Construit la liste des sources avec le texte du chunk pour le highlighting
+            # Déduplique par page (garde le premier chunk par page)
+            source_items: list[dict] = []
+            seen_pages: set[int] = set()
+            for d in context_docs:
+                pg = d.metadata.get("page", 0)
+                if pg and pg not in seen_pages:
+                    seen_pages.add(pg)
+                    # Prend les 300 premiers caractères du chunk comme extrait
+                    snippet = d.page_content[:300].strip()
+                    # Numéro de ligne de début du chunk dans la page (1-indexed)
+                    line = d.metadata.get("line_start", 1)
+                    source_items.append({"page": pg, "line": line, "snippet": snippet})
+            source_items.sort(key=lambda x: x["page"])
+            # Liste simple des pages pour rétro-compatibilité
+            source_pages = [s["page"] for s in source_items]
 
             # ── Stage 4: Stream LLM answer token by token ───────────
             # Notification à l'UI que la génération de la réponse commence
@@ -299,10 +307,10 @@ async def chat(req: ChatRequest):
 
             # Emit source pages and final done event
             # Envoie les pages sources si des références ont été trouvées
-            if source_pages:
-                # Événement SSE avec les numéros de pages
+            if source_items:
+                # Événement SSE avec les pages et les extraits pour le highlighting
                 queue.put_nowait(
-                    f"data: {json.dumps({'type': 'sources', 'pages': source_pages})}\n\n"
+                    f"data: {json.dumps({'type': 'sources', 'pages': source_pages, 'snippets': source_items})}\n\n"
                 )
 
             # Événement SSE final avec la réponse complète
