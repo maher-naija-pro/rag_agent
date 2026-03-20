@@ -3,7 +3,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "slow: marks tests that are slow (e.g. real OCR, network calls)",
-    "llm: marks tests that require a real LLM (Ollama). Mocked by default, use --llm to run against real Ollama.",
+    "llm: marks tests that require a real LLM API. Mocked by default, use --llm to run against real LLM.",
 ]
 
 [tool.coverage.run]

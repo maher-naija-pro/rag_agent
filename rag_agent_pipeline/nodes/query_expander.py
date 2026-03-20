@@ -5,8 +5,8 @@ from __future__ import annotations
 # Importation des types de messages LangChain
 from langchain_core.messages import HumanMessage, SystemMessage
 
-# Importation du modèle de langage configuré
-from config import LLM
+# Importation du modèle de langage dédié à l'expansion de requête
+from config import LLM_EXPAND as LLM
 # Paramètres d'activation et de nombre de variantes
 from config.pipeline import QUERY_EXPANSION_ENABLED, QUERY_EXPANSION_COUNT
 # Importation du logger et de la fonction de représentation détaillée

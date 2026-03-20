@@ -1,6 +1,6 @@
 """Tests for nodes.hyde — hypothetical document embedding.
 
-Default mode: LLM is auto-mocked.  With --llm: real Ollama.
+Default mode: LLM is auto-mocked.  With --llm: real LLM API.
 """
 
 import sys
@@ -67,3 +67,20 @@ class TestHyde:
         ))
         assert "expanded_queries" in result
         assert len(result["expanded_queries"]) == 2
+
+    def test_short_response_skipped(self, base_state, monkeypatch):
+        """When the LLM returns a very short passage (<10 chars), hyde skips it."""
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(_mod, "HYDE_ENABLED", True)
+        # Mock LLM to return a too-short response
+        short_llm = MagicMock()
+        short_llm.invoke.return_value = MagicMock(content="Short")
+        monkeypatch.setattr(_mod, "LLM", short_llm)
+
+        result = _mod.hyde(base_state(
+            question="test question",
+            expanded_queries=["test question"],
+        ))
+        # Should return empty dict (skip), not update expanded_queries
+        assert result == {}

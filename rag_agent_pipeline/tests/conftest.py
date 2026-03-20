@@ -1,8 +1,8 @@
 """Shared fixtures and environment setup for all tests.
 
 Two modes:
-  pytest tests/               → default: LLM is mocked, no Ollama needed
-  pytest tests/ --llm         → integration: real Ollama required
+  pytest tests/               → default: LLM is mocked, no API needed
+  pytest tests/ --llm         → integration: real LLM API required
 """
 
 import os
@@ -12,9 +12,9 @@ import uuid
 from unittest.mock import MagicMock
 
 # Configure services BEFORE importing any pipeline modules.
-os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-os.environ.setdefault("LLM_MODEL", "mistral:7b")
-os.environ.setdefault("OPENAI_API_KEY", "ollama")
+os.environ.setdefault("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
+os.environ.setdefault("LLM_API_KEY", "test-key")
+os.environ.setdefault("LLM_MODEL", "gemini-2.5-flash")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 
 import pytest
@@ -28,7 +28,7 @@ from langchain_core.messages import HumanMessage
 def pytest_addoption(parser):
     parser.addoption(
         "--llm", action="store_true", default=False,
-        help="Run tests against a real LLM (Ollama). Without this flag, LLM calls are mocked.",
+        help="Run tests against a real LLM API. Without this flag, LLM calls are mocked.",
     )
 
 
@@ -56,7 +56,7 @@ def _url_ready(url: str, timeout: float = 2) -> bool:
 
 @pytest.fixture(scope="session", autouse=True)
 def wait_for_services(request):
-    """Block until Qdrant is reachable.  Ollama is only checked when --llm is set."""
+    """Block until Qdrant is reachable. LLM API is only checked when --llm is set."""
     qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
 
     for _ in range(60):
@@ -67,14 +67,12 @@ def wait_for_services(request):
         pytest.fail(f"Qdrant not ready after 60 s ({qdrant_url})")
 
     if request.config.getoption("--llm"):
-        ollama_base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-        ollama_root = ollama_base.replace("/v1", "")
-        for _ in range(60):
-            if _url_ready(f"{ollama_root}/api/tags"):
-                break
-            time.sleep(1)
+        llm_base = os.environ.get("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
+        # Pour les API cloud (Gemini, OpenAI), on vérifie simplement que l'URL est accessible
+        if _url_ready(llm_base):
+            pass  # API accessible
         else:
-            pytest.fail(f"Ollama not ready after 60 s ({ollama_root})")
+            pytest.fail(f"LLM API not reachable ({llm_base})")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -113,8 +111,8 @@ def _auto_mock_llm(request, monkeypatch):
     import sys
 
     # Patch LLM everywhere it is imported.
-    # Use sys.modules because nodes/__init__.py re-exports functions
-    # that shadow the module names (e.g. nodes.hyde is the function, not the module).
+    # Each node imports its dedicated LLM as "LLM" (via `import LLM_X as LLM`).
+    # We also patch the per-step instances in config.llm for any direct access.
     module_keys = [
         "config.llm",
         "nodes.generator",
@@ -126,8 +124,15 @@ def _auto_mock_llm(request, monkeypatch):
     ]
     for key in module_keys:
         mod = sys.modules.get(key)
-        if mod and hasattr(mod, "LLM"):
+        if not mod:
+            continue
+        # Patche l'alias LLM dans chaque nœud
+        if hasattr(mod, "LLM"):
             monkeypatch.setattr(mod, "LLM", fake)
+        # Patche les instances per-step dans config.llm
+        for attr in ("LLM_REWRITE", "LLM_EXPAND", "LLM_HYDE", "LLM_SELF_QUERY", "LLM_GENERATE"):
+            if hasattr(mod, attr):
+                monkeypatch.setattr(mod, attr, fake)
 
 
 # ── Qdrant isolation ─────────────────────────────────────────────────────────

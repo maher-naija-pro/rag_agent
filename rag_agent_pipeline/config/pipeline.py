@@ -38,7 +38,7 @@ CACHE_MAX_SIZE             = int(os.getenv("CACHE_MAX_SIZE", "1000"))
 
 # Réécriture de requête
 # Active/désactive la réécriture de requête par le LLM
-QUERY_REWRITE_ENABLED = os.getenv("QUERY_REWRITE_ENABLED", "true").lower() in ("true", "1", "yes")
+QUERY_REWRITE_ENABLED = os.getenv("QUERY_REWRITE_ENABLED", "false").lower() in ("true", "1", "yes")
 
 # Expansion de requête
 # Active/désactive la génération de requêtes multiples

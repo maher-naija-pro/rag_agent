@@ -36,11 +36,11 @@ PDF_PATH = os.getenv(
 # ── LLM juge RAGAS ─────────────────────────────────────────────────────────
 # Modèle LLM utilisé par RAGAS pour noter les réponses (distinct du LLM du pipeline)
 # Modèle LLM pour l'évaluation
-EVAL_LLM_MODEL = os.getenv("EVAL_LLM_MODEL", os.getenv("LLM_MODEL", "mistral:7b"))
-# URL de base de l'API LLM
-EVAL_LLM_BASE_URL = os.getenv("EVAL_LLM_BASE_URL", os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"))
+EVAL_LLM_MODEL = os.getenv("EVAL_LLM_MODEL", os.getenv("LLM_MODEL", "gemini-2.5-flash"))
+# URL de base de l'API LLM (OpenAI-compatible)
+EVAL_LLM_BASE_URL = os.getenv("EVAL_LLM_BASE_URL", os.getenv("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"))
 # Clé API pour le LLM d'évaluation
-EVAL_LLM_API_KEY = os.getenv("EVAL_LLM_API_KEY", "ollama")
+EVAL_LLM_API_KEY = os.getenv("EVAL_LLM_API_KEY", os.getenv("LLM_API_KEY", ""))
 # Température du LLM (0 = déterministe)
 EVAL_LLM_TEMPERATURE = float(os.getenv("EVAL_LLM_TEMPERATURE", "0"))
 

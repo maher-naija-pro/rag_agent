@@ -16,18 +16,20 @@ Usage:
 
 # Réexporte tout pour que `from config import X` continue de fonctionner.
 
-# Importe la configuration du modèle de langage
+# Importe la configuration des modèles de langage (un par étape du pipeline)
 from config.llm import (  # noqa: F401
-    # Instance singleton du LLM
+    # Alias de rétro-compatibilité (= LLM_GENERATE)
     LLM,
-    # Nombre maximum de tokens pour le LLM
-    LLM_MAX_TOKENS,
-    # Nom du modèle LLM utilisé
-    LLM_MODEL,
-    # Température de génération du LLM
+    # Instances LLM par étape du pipeline
+    LLM_REWRITE,
+    LLM_EXPAND,
+    LLM_HYDE,
+    LLM_SELF_QUERY,
+    LLM_GENERATE,
+    # Paramètres partagés
     LLM_TEMPERATURE,
-    # URL de base du serveur Ollama
-    OLLAMA_BASE_URL,
+    LLM_BASE_URL,
+    LLM_API_KEY,
 )
 
 # Importe la configuration des embeddings

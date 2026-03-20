@@ -1,7 +1,7 @@
 """Tests for nodes.generator — LLM answer generation.
 
 Default mode: LLM is auto-mocked (returns "Mocked answer from LLM.").
-With --llm: runs against real Ollama.
+With --llm: runs against real LLM API.
 """
 
 import pytest

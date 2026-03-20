@@ -8,50 +8,10 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
-      ollama-pull:
-        condition: service_completed_successfully
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434/v1
       - QDRANT_URL=http://qdrant:6333
     env_file:
       - ./rag_agent_pipeline/.env
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_NUM_PARALLEL=1
-      - OLLAMA_FLASH_ATTENTION=1
-      - OLLAMA_NUM_GPU=99
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
-
-  ollama-pull:
-    image: ollama/ollama:latest
-    container_name: ollama-pull
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-    entrypoint: ["ollama", "pull", "${LLM_MODEL:-mistral:7b}"]
-    restart: "no"
 
   qdrant:
     image: qdrant/qdrant:v1.17.0
@@ -72,6 +32,4 @@ services:
 
 volumes:
   qdrant_storage:
-    driver: local
-  ollama_data:
     driver: local

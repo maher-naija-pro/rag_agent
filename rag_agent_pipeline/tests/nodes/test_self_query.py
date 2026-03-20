@@ -1,7 +1,7 @@
 """Tests for nodes.self_query — metadata filter extraction.
 
 Default mode: LLM is auto-mocked (returns '{"page": 5}').
-With --llm: real Ollama.
+With --llm: real LLM API.
 """
 
 import sys

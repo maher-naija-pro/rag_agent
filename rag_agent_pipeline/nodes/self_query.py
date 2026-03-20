@@ -10,8 +10,8 @@ import re
 # Importation des types de messages LangChain
 from langchain_core.messages import HumanMessage, SystemMessage
 
-# Importation du modèle de langage configuré
-from config import LLM
+# Importation du modèle de langage dédié à l'extraction de filtres
+from config import LLM_SELF_QUERY as LLM
 # Paramètres de configuration du self-query
 from config.pipeline import SELF_QUERY_ENABLED, METADATA_FIELDS
 # Importation du logger et de la fonction de représentation détaillée

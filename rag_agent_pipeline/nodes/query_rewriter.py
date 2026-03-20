@@ -5,8 +5,8 @@ from __future__ import annotations
 # Importation des types de messages LangChain
 from langchain_core.messages import HumanMessage, SystemMessage
 
-# Importation du modèle de langage configuré
-from config import LLM
+# Importation du modèle de langage dédié à la réécriture de requête
+from config import LLM_REWRITE as LLM
 # Drapeau pour activer/désactiver la réécriture de requête
 from config.pipeline import QUERY_REWRITE_ENABLED
 # Importation du logger et de la fonction de représentation détaillée

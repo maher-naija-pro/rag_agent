@@ -1,6 +1,6 @@
 """Tests for nodes.query_expander — multi-query generation.
 
-Default mode: LLM is auto-mocked.  With --llm: real Ollama.
+Default mode: LLM is auto-mocked.  With --llm: real LLM API.
 """
 
 import sys

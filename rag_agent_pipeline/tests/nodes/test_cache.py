@@ -169,12 +169,17 @@ class TestCacheStore:
 
 
 class TestGraphRouting:
-    """Tests for the graph routing functions related to cache."""
+    """Tests for the graph routing functions related to cache.
 
-    def test_after_cache_check_hit(self, base_state):
-        from graph import after_cache_check
-        assert after_cache_check(base_state(cache_hit=True)) == "generate"
+    Note: cache_check/cache_store nodes are not wired into the LangGraph graph.
+    The semantic cache is used directly in the /api/chat endpoint instead.
+    These tests verify the should_ingest router handles the ingested flag correctly.
+    """
 
-    def test_after_cache_check_miss(self, base_state):
-        from graph import after_cache_check
-        assert after_cache_check(base_state(cache_hit=False)) == "rewrite_query"
+    def test_router_ingested_routes_to_rewrite(self, base_state):
+        from graph import should_ingest
+        assert should_ingest(base_state(ingested=True)) == "rewrite_query"
+
+    def test_router_not_ingested_routes_to_load_pdf(self, base_state):
+        from graph import should_ingest
+        assert should_ingest(base_state(ingested=False)) == "load_pdf"

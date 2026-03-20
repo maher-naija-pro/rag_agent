@@ -24,8 +24,8 @@ from api.schemas import ChatRequest
 from api.state import graph, sessions, checkpointer
 # Paramètres de configuration du pipeline
 from config import (
-    # Instance du modèle de langage
-    LLM,
+    # Instance du modèle de langage pour la génération de réponses
+    LLM_GENERATE as LLM,
     # Nombre de documents à récupérer
     RETRIEVAL_K,
     # Coefficient de fusion pour la recherche hybride

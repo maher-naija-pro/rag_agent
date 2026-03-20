@@ -1,6 +1,6 @@
 """Tests for nodes.query_rewriter — query reformulation.
 
-Default mode: LLM is auto-mocked.  With --llm: real Ollama.
+Default mode: LLM is auto-mocked.  With --llm: real LLM API.
 """
 
 import sys
@@ -69,3 +69,29 @@ class TestRewriteQuery:
         assert "question" in result
         # Both mock and real LLM should return something longer than empty
         assert len(result["question"]) > 0
+
+    def test_strips_surrounding_quotes(self, base_state, monkeypatch):
+        """When the LLM wraps the rewrite in double quotes, they are removed."""
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
+        quoted_llm = MagicMock()
+        quoted_llm.invoke.return_value = MagicMock(content='"What is the price of the product?"')
+        monkeypatch.setattr(_mod, "LLM", quoted_llm)
+
+        result = _mod.rewrite_query(base_state(question="price?"))
+        assert result["question"] == "What is the price of the product?"
+        assert not result["question"].startswith('"')
+
+    def test_too_short_rewrite_keeps_original(self, base_state, monkeypatch):
+        """When the LLM returns a very short rewrite (<3 chars), the original is kept."""
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(_mod, "QUERY_REWRITE_ENABLED", True)
+        short_llm = MagicMock()
+        short_llm.invoke.return_value = MagicMock(content="ab")
+        monkeypatch.setattr(_mod, "LLM", short_llm)
+
+        result = _mod.rewrite_query(base_state(question="my original question"))
+        assert result["original_question"] == "my original question"
+        assert "question" not in result

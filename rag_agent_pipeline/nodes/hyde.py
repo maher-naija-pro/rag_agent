@@ -5,8 +5,8 @@ from __future__ import annotations
 # Importation des types de messages LangChain
 from langchain_core.messages import HumanMessage, SystemMessage
 
-# Importation du modèle de langage configuré
-from config import LLM
+# Importation du modèle de langage dédié à la génération hypothétique (HyDE)
+from config import LLM_HYDE as LLM
 # Drapeau pour activer/désactiver la génération hypothétique (HyDE)
 from config.pipeline import HYDE_ENABLED
 # Importation du logger et de la fonction de représentation détaillée

@@ -34,7 +34,7 @@ if [ "$INSTALL" = true ]; then
 fi
 
 # Start infrastructure + API (rag-api runs inside Docker)
-echo "Starting Docker services (Qdrant, Ollama, API)..."
+echo "Starting Docker services (Qdrant, API)..."
 docker compose -f "$ROOT_DIR/docker-compose.yml" up -d --build
 API_PID=""
 

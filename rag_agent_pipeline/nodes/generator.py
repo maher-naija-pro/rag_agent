@@ -10,8 +10,8 @@ from langchain_core.documents import Document
 # Importation des types de messages LangChain
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-# Importation du modèle de langage configuré
-from config import LLM
+# Importation du modèle de langage dédié à la génération de réponses
+from config import LLM_GENERATE as LLM
 # Importation du logger et de la fonction de représentation détaillée
 from logger import get_logger, deep_repr
 # Importation du type d'état du pipeline RAG

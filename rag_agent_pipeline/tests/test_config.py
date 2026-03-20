@@ -113,6 +113,12 @@ class TestLLMConfig:
         from config.llm import LLM_TEMPERATURE
         assert 0.0 <= LLM_TEMPERATURE <= 2.0
 
-    def test_max_tokens_none_or_positive(self):
-        from config.llm import LLM_MAX_TOKENS
-        assert LLM_MAX_TOKENS is None or LLM_MAX_TOKENS > 0
+    def test_per_step_models_are_set(self):
+        from config.llm import (
+            LLM_MODEL_REWRITE, LLM_MODEL_EXPAND, LLM_MODEL_HYDE,
+            LLM_MODEL_SELF_QUERY, LLM_MODEL_GENERATE,
+        )
+        # Chaque modèle par étape doit être une chaîne non vide
+        for model in (LLM_MODEL_REWRITE, LLM_MODEL_EXPAND, LLM_MODEL_HYDE,
+                      LLM_MODEL_SELF_QUERY, LLM_MODEL_GENERATE):
+            assert isinstance(model, str) and len(model) > 0
