@@ -48,7 +48,7 @@ QUERY_EXPANSION_COUNT   = int(os.getenv("QUERY_EXPANSION_COUNT", "3"))
 
 # Auto-requête (extraction de filtres de métadonnées)
 # Active/désactive l'extraction automatique de filtres depuis la requête
-SELF_QUERY_ENABLED = os.getenv("SELF_QUERY_ENABLED", "true").lower() in ("true", "1", "yes")
+SELF_QUERY_ENABLED = os.getenv("SELF_QUERY_ENABLED", "false").lower() in ("true", "1", "yes")
 
 # HyDE (Hypothetical Document Embedding)
 # Active/désactive la génération d'un document hypothétique pour améliorer la recherche

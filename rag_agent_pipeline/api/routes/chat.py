@@ -118,6 +118,10 @@ async def chat(req: ChatRequest):
         """
         try:
             # ── Stage 1: Rewrite query for better retrieval ──────────
+            # Notification à l'UI que la réécriture commence
+            queue.put_nowait(
+                f"data: {json.dumps({'type': 'status', 'step': 'rewrite', 'message': 'Analyse de la question…'})}\n\n"
+            )
             # Import paresseux du module de réécriture
             from nodes.query_rewriter import rewrite_query
 
@@ -148,6 +152,10 @@ async def chat(req: ChatRequest):
             search_question = rewrite_result.get("question", req.question)
 
             # ── Stage 2: Retrieve candidates from Qdrant ─────────────
+            # Notification à l'UI que la recherche documentaire commence
+            queue.put_nowait(
+                f"data: {json.dumps({'type': 'status', 'step': 'retrieve', 'message': 'Recherche dans le document…'})}\n\n"
+            )
             # Paramètres de recherche : nombre de résultats
             search_kwargs: dict = {"k": RETRIEVAL_K}
             # Applique le seuil de similarité si défini
@@ -175,6 +183,10 @@ async def chat(req: ChatRequest):
             candidates = base_retriever.invoke(search_question)
 
             # ── Stage 3: Rerank candidates ───────────────────────────
+            # Notification à l'UI que le reclassement commence
+            queue.put_nowait(
+                f"data: {json.dumps({'type': 'status', 'step': 'rerank', 'message': 'Classement des résultats…'})}\n\n"
+            )
             # Instancie le modèle de re-classement
             reranker = _build_reranker()
             # Re-classe les documents candidats par pertinence
@@ -194,6 +206,10 @@ async def chat(req: ChatRequest):
             )
 
             # ── Stage 4: Stream LLM answer token by token ───────────
+            # Notification à l'UI que la génération de la réponse commence
+            queue.put_nowait(
+                f"data: {json.dumps({'type': 'status', 'step': 'generate', 'message': 'Génération de la réponse…'})}\n\n"
+            )
             # Formate les documents en texte contextuel pour le LLM
             context_str = _format_docs(context_docs)
             # Récupère le checkpoint pour l'historique

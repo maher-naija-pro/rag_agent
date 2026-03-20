@@ -26,6 +26,8 @@ services:
       - ollama_data:/root/.ollama
     environment:
       - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_NUM_GPU=99
     deploy:
       resources:
         reservations:
