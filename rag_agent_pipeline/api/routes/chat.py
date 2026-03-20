@@ -6,6 +6,8 @@ from __future__ import annotations
 
 # Module de sérialisation/désérialisation JSON
 import json
+# File d'attente asynchrone pour le pont sync → async
+import asyncio
 # Manipulation de chemins de fichiers
 from pathlib import Path
 
@@ -96,10 +98,26 @@ async def chat(req: ChatRequest):
     # Journalise la requête de chat
     log.info("Chat request (session=%s): '%s'", req.session_id, req.question[:80])
 
-    # Générateur asynchrone produisant les événements SSE
-    async def event_stream():
+    # ── Sentinel indiquant la fin du flux dans la queue ──
+    _DONE = object()
+
+    # File d'attente asynchrone reliant le thread sync au générateur async.
+    # Le pipeline RAG (rewrite, retrieval, rerank, LLM) est entièrement
+    # synchrone. Si on l'exécute dans un async generator, il bloque la
+    # boucle événementielle d'Uvicorn et empêche l'envoi des octets SSE.
+    # La solution : exécuter le pipeline dans un thread via asyncio.to_thread()
+    # et pousser chaque événement SSE dans une asyncio.Queue que le
+    # générateur async consomme sans bloquer.
+    queue: asyncio.Queue[str | object] = asyncio.Queue()
+
+    def _run_pipeline():
+        """Exécute le pipeline RAG complet dans un thread séparé.
+
+        Pousse chaque événement SSE (token, sources, done, error)
+        dans la queue partagée, terminé par le sentinel _DONE.
+        """
         try:
-            # ── Stage 1: Rewrite query for better retrieval ──────────────
+            # ── Stage 1: Rewrite query for better retrieval ──────────
             # Import paresseux du module de réécriture
             from nodes.query_rewriter import rewrite_query
 
@@ -129,7 +147,7 @@ async def chat(req: ChatRequest):
             # Utilise la question réécrite ou l'originale
             search_question = rewrite_result.get("question", req.question)
 
-            # ── Stage 2: Retrieve candidates from Qdrant ─────────────────
+            # ── Stage 2: Retrieve candidates from Qdrant ─────────────
             # Paramètres de recherche : nombre de résultats
             search_kwargs: dict = {"k": RETRIEVAL_K}
             # Applique le seuil de similarité si défini
@@ -156,7 +174,7 @@ async def chat(req: ChatRequest):
             # Exécute la recherche et récupère les documents candidats
             candidates = base_retriever.invoke(search_question)
 
-            # ── Stage 3: Rerank candidates ───────────────────────────────
+            # ── Stage 3: Rerank candidates ───────────────────────────
             # Instancie le modèle de re-classement
             reranker = _build_reranker()
             # Re-classe les documents candidats par pertinence
@@ -175,7 +193,7 @@ async def chat(req: ChatRequest):
                 )
             )
 
-            # ── Stage 4: Stream LLM answer token by token ───────────────
+            # ── Stage 4: Stream LLM answer token by token ───────────
             # Formate les documents en texte contextuel pour le LLM
             context_str = _format_docs(context_docs)
             # Récupère le checkpoint pour l'historique
@@ -209,16 +227,25 @@ async def chat(req: ChatRequest):
                 if tok:
                     # Ajoute le token à la réponse complète
                     full_answer += tok
-                    # Envoie le token en tant qu'événement SSE
-                    yield f"data: {json.dumps({'type': 'token', 'content': tok})}\n\n"
+                    # Pousse le token dans la queue SSE
+                    queue.put_nowait(
+                        f"data: {json.dumps({'type': 'token', 'content': tok})}\n\n"
+                    )
 
-            # ── Stage 5: Persist conversation in checkpointer ──────────
-            # Importe le type de message IA
+            # ── Stage 5: Persist conversation in checkpointer ────────
+            # Importe le type de message IA et l'utilitaire de checkpoint
             from langchain_core.messages import AIMessage
+            from langgraph.checkpoint.base import empty_checkpoint
 
             try:
-                # Prépare la configuration de sauvegarde
-                save_config = {**config, "checkpoint_ns": "", "checkpoint_id": None}
+                # Prépare la configuration de sauvegarde avec checkpoint_ns
+                # dans "configurable" (là où InMemorySaver l'attend)
+                save_config = {
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": "",
+                    }
+                }
                 # Récupère le checkpoint actuel
                 checkpoint = checkpointer.get(save_config)
                 # Initialise la liste des messages précédents
@@ -234,14 +261,20 @@ async def chat(req: ChatRequest):
                     # Réponse générée par le LLM
                     AIMessage(content=full_answer),
                 ]
+                # Construit un checkpoint valide avec la structure attendue
+                # par InMemorySaver.put() (id, ts, v, channel_versions, etc.)
+                new_cp = empty_checkpoint()
+                new_cp["channel_values"] = {"messages": new_msgs}
+                new_cp["channel_versions"] = {"messages": len(new_msgs)}
                 # Sauvegarde le nouvel état dans le checkpointer
                 checkpointer.put(
                     save_config,
-                    # Données du checkpoint avec les messages mis à jour
-                    {"channel_values": {"messages": new_msgs}},
+                    # Checkpoint complet avec tous les champs requis
+                    new_cp,
                     # Métadonnées du checkpoint
                     {"source": "input", "step": len(new_msgs), "writes": {}},
-                    {},
+                    # Nouvelles versions pour le suivi des canaux
+                    {"messages": len(new_msgs)},
                 )
             # Capture les erreurs de sauvegarde
             except Exception as save_err:
@@ -252,17 +285,45 @@ async def chat(req: ChatRequest):
             # Envoie les pages sources si des références ont été trouvées
             if source_pages:
                 # Événement SSE avec les numéros de pages
-                yield f"data: {json.dumps({'type': 'sources', 'pages': source_pages})}\n\n"
+                queue.put_nowait(
+                    f"data: {json.dumps({'type': 'sources', 'pages': source_pages})}\n\n"
+                )
 
             # Événement SSE final avec la réponse complète
-            yield f"data: {json.dumps({'type': 'done', 'answer': full_answer})}\n\n"
+            queue.put_nowait(
+                f"data: {json.dumps({'type': 'done', 'answer': full_answer})}\n\n"
+            )
 
         # Capture toute erreur survenue pendant le pipeline
         except Exception as e:
             # Journalise l'erreur
             log.error("Chat error (session=%s): %s", req.session_id, e)
             # Envoie un événement SSE d'erreur
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            queue.put_nowait(
+                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            )
+        finally:
+            # Signale la fin du flux au générateur async
+            queue.put_nowait(_DONE)
+
+    async def event_stream():
+        """Générateur async qui consomme la queue sans bloquer la boucle.
+
+        Le pipeline sync tourne dans un thread séparé (asyncio.to_thread)
+        et pousse les événements SSE dans la queue. Ce générateur les
+        récupère avec await queue.get() — coopératif, donc Uvicorn peut
+        envoyer chaque chunk dès qu'il arrive.
+        """
+        # Lance le pipeline sync dans un thread du pool par défaut
+        task = asyncio.get_event_loop().run_in_executor(None, _run_pipeline)
+        # Consomme les événements SSE de la queue jusqu'au sentinel
+        while True:
+            item = await queue.get()
+            if item is _DONE:
+                break
+            yield item
+        # Attend la fin du thread pour propager les exceptions éventuelles
+        await task
 
     # Retourne une réponse HTTP en streaming
     # Configure le type MIME SSE et les en-têtes

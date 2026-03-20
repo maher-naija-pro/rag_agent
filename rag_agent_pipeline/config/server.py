@@ -16,7 +16,7 @@ API_PORT = int(os.getenv("API_PORT", "8000"))
 
 # CORS (Cross-Origin Resource Sharing)
 # Liste des origines autorisées, séparées par des virgules
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:4000").split(",")
 
 # Upload de fichiers
 # Répertoire temporaire pour les fichiers uploadés
